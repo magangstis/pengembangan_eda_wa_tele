@@ -7,7 +7,7 @@ const app = express(); // Membuat instance aplikasi Express
 const port = process.env.PORT || 3003; // Menentukan port server, menggunakan environment variable PORT jika tersedia, atau default ke 3003
 
 // Inisialisasi Telegram bot
-const TELEGRAM_BOT_TOKEN = '7294945219:AAFGWI5FippG8nE4bS4Pog2o2v9D8V5IcWo'; // Token untuk bot Telegram
+const TELEGRAM_BOT_TOKEN = '<< Masukkan token bot disini >>'; // Token untuk bot Telegram
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN); // Membuat instance Telegraf dengan token bot
 
 app.use(bodyParser.json()); // Menggunakan body-parser untuk mem-parsing JSON pada body request

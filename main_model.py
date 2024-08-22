@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify  # Mengimpor Flask dan modul untuk menangani permintaan dan respon HTTP
-from API_GEMINI import GOOGLE_API_KEY  # Mengimpor kunci API Google dari modul API_GEMINI
 
 # Mengimpor pustaka yang diperlukan dari langchain-community dan langchain-google-genai
 from langchain_community.vectorstores import FAISS 
@@ -19,9 +18,9 @@ import uuid  # Mengimpor UUID untuk menghasilkan ID sesi unik
 app = Flask(__name__)  # Membuat instans aplikasi Flask
 
 # Memuat model embedding Google Generative AI dan menginisialisasi FAISS index
-embedding_model = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+embedding_model = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key="<< Masukkan google api key disini >>")
 vector_store = FAISS.load_local("faiss_index", embedding_model, allow_dangerous_deserialization=True)
-model = ChatGoogleGenerativeAI(model="models/gemini-1.5-flash", temperature=0.1, max_tokens=1000, google_api_key=GOOGLE_API_KEY)
+model = ChatGoogleGenerativeAI(model="models/gemini-1.5-flash", temperature=0.1, max_tokens=1000, google_api_key="<< Masukkan google api key disini >>")
 
 # Menyimpan data sesi dalam dictionary
 store = {}
