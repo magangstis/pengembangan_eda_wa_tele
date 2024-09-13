@@ -79,26 +79,28 @@ def create_or_update_vector_store(text_chunks, vector_store_path="faiss_index"):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=GOOGLE_API_KEY)
     
     try:
-        # Memeriksa apakah vektor store sudah ada
+        # Check if the vector store already exists
         if os.path.exists(vector_store_path):
-            # Memuat vektor store yang ada
+            # Load the existing vector store
             vector_store = FAISS.load_local(vector_store_path, embeddings, allow_dangerous_deserialization=True)
-            st.info("Vektor store yang ada berhasil dimuat.")
+            st.info("Existing vector store loaded.")
         else:
-            # Membuat vektor store baru jika tidak ada
-            vector_store = FAISS(embedding=embeddings)
-            st.info("Vektor store baru berhasil dibuat.")
+            # Create a new vector store
+            index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
+            vector_store = FAISS(
+                embedding_function=embeddings, 
+                index=index,
+                docstore=InMemoryDocstore(),
+                index_to_docstore_id={},)
+            st.info("New vector store created.")
         
-        # Membuat objek Document untuk setiap chunk teks
-        documents = [Document(page_content=chunk) for chunk in text_chunks]
-        
-        # Menghasilkan UUID untuk setiap dokumen
+        # Generate unique IDs for the documents
         uuids = [str(uuid4()) for _ in range(len(documents))]
         
-        # Menambahkan dokumen ke vektor store
+        # Add new documents to the vector store
         vector_store.add_documents(documents=documents, ids=uuids)
         
-        # Menyimpan vektor store
+        # Save the updated vector store
         vector_store.save_local(vector_store_path)
         st.success("Vektor store berhasil diperbarui.")
         

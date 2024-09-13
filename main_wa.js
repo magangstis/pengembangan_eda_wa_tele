@@ -53,7 +53,7 @@ app.post('/webhook', async (req, res) => {
         // Langkah 4: Kirim hasil generate content ke WhatsApp melalui API WACONNECT
         const whatsappApiUrl = "https://api-waconnect.bps.web.id/kirim-text"; // URL endpoint API WhatsApp
         const whatsappData = {
-            token: "115e5a83fca70daee0499a440f606c95cade29e3effa64f1ce7ede5544f4423d", // Token otentikasi API
+            token: "<<Isi sesuai token yang didapatkan dari WAConnect>>", // Token otentikasi API
             notelp: notelp, // Nomor telepon tujuan
             text: generatedContent // Pesan yang akan dikirim
         };

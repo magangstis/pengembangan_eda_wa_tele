@@ -20,7 +20,8 @@ app = Flask(__name__)  # Membuat instans aplikasi Flask
 # Memuat model embedding Google Generative AI dan menginisialisasi FAISS index
 embedding_model = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key="<< Masukkan google api key disini >>")
 vector_store = FAISS.load_local("faiss_index", embedding_model, allow_dangerous_deserialization=True)
-model = ChatGoogleGenerativeAI(model="models/gemini-1.5-flash", temperature=0.1, max_tokens=1000, google_api_key="<< Masukkan google api key disini >>")
+model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-exp-0827", temperature = 0.1, google_api_key="GOOGLE_API_KEY") # isi sesuai google api key Anda
+
 
 # Menyimpan data sesi dalam dictionary
 store = {}
@@ -49,7 +50,7 @@ def get_conversational_chain():
     """
 
     # Menginisialisasi retriever dengan FAISS
-    retriever = vector_store.as_retriever()
+    retriever = vector_store.as_retriever(search_type="similarity_score_threshold", search_kwargs={"score_threshold": 0.2})
 
     # Membuat prompt untuk percakapan dengan menggunakan template di atas
     prompt = ChatPromptTemplate.from_messages(

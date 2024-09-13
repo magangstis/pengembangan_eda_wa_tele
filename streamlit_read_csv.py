@@ -62,13 +62,24 @@ def load_csv_files_with_metadata(csv_files):
                     "source": file_name,
                 }
                 
-                # Menggabungkan data baris menjadi teks yang bermakna
-                content = f"{file_name} dari {row['input']} tahun {row['tahun']} adalah {row['output']}."
-                
-                # Membuat objek Document dengan konten dan metadata
+               # Ensure 'turvar' is properly handled
+                turvar = row['turvar'] if 'turvar' in df.columns and pd.notna(row['turvar']) and row['turvar'] != "" else None
+
+                # Handle 'vervar', 'datacontent', and 'tahun'
+                vervar = row['vervar'] if 'vervar' in df.columns and pd.notna(row['vervar']) else "Wilayah tidak tersedia"
+                datacontent = row['datacontent'] if 'datacontent' in df.columns and pd.notna(row['datacontent']) else "Data tidak tersedia"
+                tahun = row['tahun'] if 'tahun' in df.columns and pd.notna(row['tahun']) else "Tahun tidak tersedia"
+
+                # Determine the content based on the presence of 'turvar'
+                if turvar:
+                    content = f"Berdasarkan data {file_name}, pada tahun {tahun}, {turvar} di wilayah {vervar} tercatat sebesar {datacontent}."
+                else:
+                    content = f"Berdasarkan data {file_name}, pada tahun {tahun}, di wilayah {vervar} tercatat sebesar {datacontent}."
+
+                # Create a Document object with content and metadata
                 document = Document(page_content=content, metadata=metadata)
                 
-                # Menambahkan dokumen ke daftar
+                # Add document to the list
                 all_documents.append(document)
         
         except Exception as e:
@@ -90,23 +101,28 @@ def create_or_update_vector_store(documents, vector_store_path="faiss_index"):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=GOOGLE_API_KEY)
     
     try:
-        # Memeriksa apakah vector store sudah ada
+       # Check if the vector store already exists
         if os.path.exists(vector_store_path):
-            # Memuat vector store yang sudah ada
+            # Load the existing vector store
             vector_store = FAISS.load_local(vector_store_path, embeddings, allow_dangerous_deserialization=True)
             st.info("Existing vector store loaded.")
         else:
-            # Membuat vector store baru
-            vector_store = FAISS(embedding=embeddings)
+            # Create a new vector store
+            index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
+            vector_store = FAISS(
+                embedding_function=embeddings, 
+                index=index,
+                docstore=InMemoryDocstore(),
+                index_to_docstore_id={},)
             st.info("New vector store created.")
         
-        # Menghasilkan ID unik untuk dokumen
+        # Generate unique IDs for the documents
         uuids = [str(uuid4()) for _ in range(len(documents))]
         
-        # Menambahkan dokumen baru ke vector store
+        # Add new documents to the vector store
         vector_store.add_documents(documents=documents, ids=uuids)
         
-        # Menyimpan vector store yang diperbarui
+        # Save the updated vector store
         vector_store.save_local(vector_store_path)
         st.success("Vector store updated successfully.")
         
