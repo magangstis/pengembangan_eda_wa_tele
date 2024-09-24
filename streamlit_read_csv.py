@@ -72,9 +72,9 @@ def load_csv_files_with_metadata(csv_files):
 
                 # Determine the content based on the presence of 'turvar'
                 if turvar:
-                    content = f"Berdasarkan data {file_name}, pada tahun {tahun}, {turvar} di wilayah {vervar} tercatat sebesar {datacontent}."
+                    content = f"{file_name}, {tahun}, {turvar} untuk {vervar}, {datacontent}."
                 else:
-                    content = f"Berdasarkan data {file_name}, pada tahun {tahun}, di wilayah {vervar} tercatat sebesar {datacontent}."
+                    content = f"{file_name}, {tahun},  {vervar}, {datacontent}."
 
                 # Create a Document object with content and metadata
                 document = Document(page_content=content, metadata=metadata)
