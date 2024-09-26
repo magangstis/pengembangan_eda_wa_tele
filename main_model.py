@@ -62,11 +62,10 @@ def get_conversational_chain():
     Jawaban yang relevan (berdasarkan dokumen):\n
     """
 
-    retriever = vector_store.as_retriever(search_type="similarity_score_threshold", search_kwargs={"score_threshold": 0.05})
-    # retriever = vector_store.as_retriever(search_type="mmr")
-    # retriever = vector_store.as_retriever(search_type="similarity")
-    # retriever = vector_store.as_retriever()
+    # retriever = vector_store.as_retriever(search_type="similarity_score_threshold", search_kwargs={"score_threshold": 0.1})
+    retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
     
+
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", prompt_template),
@@ -74,18 +73,17 @@ def get_conversational_chain():
             ("human", "{input}")
         ]
     )
-    
+
     question_answer_chain = create_stuff_documents_chain(model, prompt)
-    
+
     rag_chain = create_retrieval_chain(retriever, question_answer_chain)
-    
+
     return rag_chain
 
 def get_session_history(session_id: str) -> BaseChatMessageHistory:
     """Retrieve the session history for a given session_id. Create a new one if it does not exist."""
     if session_id not in store:
         store[session_id] = ChatMessageHistory()
-        # store[session_id] = ChatMessageHistory()
     return store[session_id]
 
 def get_response(user_question, session_id):
@@ -93,7 +91,7 @@ def get_response(user_question, session_id):
     try:
         # Perform similarity search using FAISS
         docs = vector_store.similarity_search(user_question)
-        
+
         # Use the QA chain to get a detailed answer
         rag_chain = get_conversational_chain()
 
@@ -114,12 +112,10 @@ def get_response(user_question, session_id):
             config=config
         )
 
-        # Debugging: Print the response to check its structure
-        # print("Response object:", response)
         # Extract the answer text
         response_text = response.get("answer", "")
 
-        # Cek jika ada response_code dalam respons
+        # Check for specific response codes
         response_code = response.get("response_code", 200)
         if response_code == 429:
             return "Maaf, layanan saat ini sedang sibuk. Silakan coba lagi nanti."
@@ -128,12 +124,11 @@ def get_response(user_question, session_id):
 
         # Remove emojis from the response
         response_text = remove_emojis(response_text)
-        
+
     except Exception as e:
         response_text = f"Error: {str(e)}"
-    
+
     return response_text
-    # return "Data sedang diperbaiki. Silakan coba lagi nanti."
 
 @app.route('/process_text', methods=['POST'])
 def process_text():
@@ -145,7 +140,7 @@ def process_text():
         # If notelp is not provided, generate a new one
         if not notelp:
             notelp = str(uuid.uuid4())
-        
+
         # Process the input text and get the response
         processed_text = get_response(response_text, notelp)
 
