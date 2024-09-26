@@ -1,68 +1,45 @@
-import os  # Mengimpor modul os untuk berinteraksi dengan sistem operasi
-import pandas as pd  # Mengimpor pandas untuk manipulasi dan analisis data
-import streamlit as st  # Mengimpor streamlit untuk membuat antarmuka web
-import io  # Mengimpor io untuk menangani input/output file
-from langchain.text_splitter import RecursiveCharacterTextSplitter  # Mengimpor text splitter untuk membagi teks menjadi bagian yang lebih kecil
-from API_GEMINI import GOOGLE_API_KEY  # Mengimpor kunci API Google dari file API_GEMINI
-from langchain_google_genai import GoogleGenerativeAIEmbeddings  # Mengimpor embedding dari Google Generative AI
-import google.generativeai as genai  # Mengimpor library generative AI dari Google
-from langchain.vectorstores import FAISS  # Mengimpor FAISS untuk pencarian berbasis vektor
-from langchain_google_genai import ChatGoogleGenerativeAI  # Mengimpor model chat dari Google Generative AI
-from langchain.prompts import PromptTemplate  # Mengimpor template prompt dari LangChain
-from langchain.chains.question_answering import load_qa_chain  # Mengimpor chain untuk penjawaban pertanyaan
-from langchain_core.documents import Document  # Mengimpor kelas Document untuk menyimpan teks dan metadata
-from uuid import uuid4  # Mengimpor uuid4 untuk menghasilkan ID unik
+import os
+import pandas as pd
+import streamlit as st
+import io
+import numpy as np
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from API_GEMINI import GOOGLE_API_KEY
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+import google.generativeai as genai
+from langchain.vectorstores import FAISS
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.prompts import PromptTemplate
+from langchain.chains.question_answering import load_qa_chain
+from langchain_core.documents import Document
+from uuid import uuid4
+from langchain_community.docstore.in_memory import InMemoryDocstore
+import faiss
 
-# Mengonfigurasi API Google Generative AI dengan kunci API yang disediakan
 genai.configure(api_key=GOOGLE_API_KEY)
 
-def preprocess_text(text):
-    """
-    Memproses teks yang diekstrak dari PDF agar dapat digunakan oleh LangChain.
-    
-    Args:
-        text (str): Teks yang akan diproses.
-    
-    Returns:
-        List[str]: Daftar bagian teks yang telah dipecah menjadi beberapa chunk.
-    """
-    if not text:
-        return []
-    
-    # Membagi teks menjadi chunk berdasarkan ukuran tertentu dengan overlap
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000, separators=[",","\n","\n\n"], length_function=len)
-    return text_splitter.split_text(text)
-
 def load_csv_files_with_metadata(csv_files):
-    """
-    Memuat file CSV, menambahkan metadata, dan mengembalikan dokumen dengan metadata.
-    
-    Args:
-        csv_files (list): Daftar file CSV yang diunggah.
-    
-    Returns:
-        List[Document]: Daftar objek dokumen dengan konten dan metadata.
-    """
+    """Load CSV files, add metadata, and return documents with metadata."""
     all_documents = []
     
     for file in csv_files:
         try:
-            # Membaca konten file CSV dari UploadedFile object
-            file_content = file.read()  # Mengembalikan konten file dalam bentuk bytes
+            # Read the CSV data from the UploadedFile object
+            file_content = file.read()  # This returns the content of the file as bytes
             
-            # Mengonversi konten file menjadi pandas DataFrame
-            df = pd.read_csv(io.StringIO(file_content.decode('utf-8')), skiprows=1)
+            # Convert the file content to a pandas DataFrame
+            df = pd.read_csv(io.StringIO(file_content.decode('utf-8')))
             
-            # Mengekstrak nama file tanpa ekstensi
+            # Extract the file name without extension
             file_name = os.path.basename(file.name).split('.')[0]
             
-            # Iterasi setiap baris dalam DataFrame dan membuat objek Document dengan metadata
+            # Iterate over each row in the dataframe and create Document objects with metadata
             for index, row in df.iterrows():
                 metadata = {
                     "source": file_name,
                 }
-                
-               # Ensure 'turvar' is properly handled
+
+                # Ensure 'turvar' is properly handled
                 turvar = row['turvar'] if 'turvar' in df.columns and pd.notna(row['turvar']) and row['turvar'] != "" else None
 
                 # Handle 'vervar', 'datacontent', and 'tahun'
@@ -74,7 +51,7 @@ def load_csv_files_with_metadata(csv_files):
                 if turvar:
                     content = f"{file_name}, {tahun}, {turvar} untuk {vervar}, {datacontent}."
                 else:
-                    content = f"{file_name}, {tahun},  {vervar}, {datacontent}."
+                    content = f"{file_name}, {tahun}, {vervar}, {datacontent}."
 
                 # Create a Document object with content and metadata
                 document = Document(page_content=content, metadata=metadata)
@@ -87,42 +64,24 @@ def load_csv_files_with_metadata(csv_files):
     
     return all_documents
 
-def create_or_update_vector_store(documents, vector_store_path="faiss_index"):
-    """
-    Membuat atau memperbarui vector store dengan dokumen yang diberikan.
-    
-    Args:
-        documents (list): Daftar objek dokumen yang akan disimpan dalam vector store.
-        vector_store_path (str): Path untuk menyimpan vector store.
-    
-    Returns:
-        FAISS: Objek FAISS yang berisi vector store.
-    """
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=GOOGLE_API_KEY)
+def create_or_update_vector_store(documents, vector_store_path="faiss_index", batch_size=1000):
+    """Create or update a vector store with the given documents in batches."""
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
     
     try:
-       # Check if the vector store already exists
         if os.path.exists(vector_store_path):
-            # Load the existing vector store
             vector_store = FAISS.load_local(vector_store_path, embeddings, allow_dangerous_deserialization=True)
             st.info("Existing vector store loaded.")
         else:
-            # Create a new vector store
             index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
-            vector_store = FAISS(
-                embedding_function=embeddings, 
-                index=index,
-                docstore=InMemoryDocstore(),
-                index_to_docstore_id={},)
+            vector_store = FAISS(embedding_function=embeddings, index=index, docstore=InMemoryDocstore(), index_to_docstore_id={})
             st.info("New vector store created.")
         
-        # Generate unique IDs for the documents
-        uuids = [str(uuid4()) for _ in range(len(documents))]
+        for i in range(0, len(documents), batch_size):
+            batch_docs = documents[i:i + batch_size]
+            uuids = [str(uuid4()) for _ in range(len(batch_docs))]
+            vector_store.add_documents(documents=batch_docs, ids=uuids)
         
-        # Add new documents to the vector store
-        vector_store.add_documents(documents=documents, ids=uuids)
-        
-        # Save the updated vector store
         vector_store.save_local(vector_store_path)
         st.success("Vector store updated successfully.")
         
@@ -133,14 +92,17 @@ def create_or_update_vector_store(documents, vector_store_path="faiss_index"):
     return vector_store
 
 def get_conversational_chain():
-    """
-    Membuat dan mengembalikan chain untuk penjawab pertanyaan.
-    
-    Returns:
-        Chain: Objek chain untuk menjawab pertanyaan berdasarkan konteks.
-    """
+    """Create and return a QA chain."""
     prompt_template = """
-    Anda adalah EDA (Electronic Data Assistance) pada aplikasi WhatsApp yang membantu pengguna berkonsultasi dengan pertanyaan statistik dan permintaan data khususnya dari BPS Provinsi Sumatera Utara. Sebagai kaki tangan BPS Provinsi Sumatera Utara, Anda tidak boleh mendiskreditkan BPS Provinsi Sumatera Utara.
+    Anda adalah EDA (Electronic Data Assistance) pada aplikasi WhatsApp yang membantu pengguna berkonsultasi dengan pertanyaan statistik dan permintaan data khususnya dari BPS Provinsi Sumatera Utara. Sebagai kaki tangan BPS Provinsi Sumatera Utara, Anda tidak boleh mendiskreditkan BPS Provinsi Sumatera Utara. Kepala BPS Provinsi Sumatera Utara adalah Asim Saputra, SST, M.Ec.Dev. Kantor BPS Provinsi Sumatera Utara berlokasi di Jalan Asrama No. 179, Dwikora, Medan Helvetia, Medan, Sumatera Utara 20123.
+
+    Visi BPS pada tahun 2024 adalah menjadi penyedia data statistik berkualitas untuk Indonesia
+    Maju.
+    Misi BPS pada tahun 2024 meliputi: 1) Menyediakan statistik berkualitas yang berstandar
+    nasional dan internasional; 2) Membina K/L/D/I melalui Sistem Statistik Nasional yang
+    berkesinambungan; 3) Mewujudkan pelayanan prima di bidang statistik untuk terwujudnya
+    Sistem Statistik Nasional; 4) Membangun SDM yang unggul dan adaptif berlandaskan nilai
+    profesionalisme, integritas, dan amanah.
 
     Anda tidak menerima input berupa audio dan gambar.
 
@@ -152,54 +114,44 @@ def get_conversational_chain():
     Answer:
     """
     
-    model = ChatGoogleGenerativeAI(model="models/gemini-1.5-flash", temperature=0.1, google_api_key=GOOGLE_API_KEY)
+    model = ChatGoogleGenerativeAI(model="models/gemini-1.5-flash-exp-0827", temperature=0.1, google_api_key=GOOGLE_API_KEY)
     prompt = PromptTemplate(template=prompt_template, input_variables=['context', 'question'])
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     return chain
 
 def handle_user_input(user_question):
-    """
-    Mengolah input pengguna dan mendapatkan respons dari model.
-    
-    Args:
-        user_question (str): Pertanyaan dari pengguna.
-    """
+    """Handle user input and get response."""
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
     
     try:
-        # Memuat vector store yang sudah ada
         new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-        docs = new_db.similarity_search(user_question)  # Mencari dokumen yang mirip dengan pertanyaan pengguna
+        docs = new_db.similarity_search(user_question)
         
-        # Mendapatkan chain untuk penjawab pertanyaan
         chain = get_conversational_chain()
         response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
         
-        st.write("Reply:", response["output_text"])  # Menampilkan jawaban dari model
+        st.write("Reply:", response["output_text"])
         
     except Exception as e:
         st.error(f"Error processing user input: {e}")
 
 def main():
-    """
-    Fungsi utama untuk menjalankan aplikasi Streamlit.
-    """
-    st.set_page_config(page_title="Chat CSV")  # Mengatur konfigurasi halaman
-    st.header("Chat with CSV using Gemini")  # Menampilkan header aplikasi
+    st.set_page_config(page_title="Chat CSV")
+    st.header("Chat with CSV using Gemini")
     
-    user_question = st.text_input("Ask a Question from the CSV Files")  # Menampilkan input teks untuk pertanyaan pengguna
+    user_question = st.text_input("Ask a Question from the CSV Files")
     
     if user_question:
-        handle_user_input(user_question)  # Mengolah input pengguna jika ada
+        handle_user_input(user_question)
     
     with st.sidebar:
         st.title("Menu: ")
         
-        # Memeriksa apakah file CSV sudah disimpan di session state
+        # Check if CSV files are stored in session state
         if 'csv_files' not in st.session_state:
             st.session_state.csv_files = []
 
-        # Widget untuk mengunggah file
+        # File uploader widget
         uploaded_files = st.file_uploader("Upload your CSV Files", accept_multiple_files=True)
         
         if uploaded_files:
@@ -210,17 +162,17 @@ def main():
                 if st.session_state.csv_files:
                     documents = load_csv_files_with_metadata(st.session_state.csv_files)
                     if documents:
-                        create_or_update_vector_store(documents)  # Membuat atau memperbarui vector store dengan dokumen yang diunggah
+                        create_or_update_vector_store(documents)
                         
-                        # Menampilkan informasi file yang diunggah
+                        # Display file info
                         st.write(f"Number of files uploaded: {len(st.session_state.csv_files)}")
                         st.write("Files uploaded:")
                         for file in st.session_state.csv_files:
                             st.write(f"- {file.name}")
                         
-                        st.success("Processing Complete")  # Menampilkan pesan sukses setelah proses selesai
+                        st.success("Processing Complete")
                 else:
-                    st.error("Please upload CSV files.")  # Menampilkan pesan kesalahan jika tidak ada file yang diunggah
+                    st.error("Please upload CSV files.")
                 
 if __name__ == "__main__":
-    main()  # Menjalankan aplikasi Streamlit
+    main()
